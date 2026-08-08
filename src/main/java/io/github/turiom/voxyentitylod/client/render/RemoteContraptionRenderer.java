@@ -1,5 +1,6 @@
 package io.github.turiom.voxyentitylod.client.render;
 
+import io.github.turiom.voxyentitylod.VoxyEntityLOD;
 import me.cortex.voxy.client.config.VoxyConfig;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -108,10 +109,16 @@ public final class RemoteContraptionRenderer {
 		double maxSq = maxBlocks * maxBlocks;
 
 			// Remote path — contraptions the server handed us (beyond its tracking range).
+			boolean dbg = DEBUG && ((++debugFrame & 31) == 0);
 			for (var entry : CONTRAPTIONS.entrySet()) {
 				int id = entry.getKey();
 				var state = entry.getValue();
 				var entity = state.entity();
+
+				if (dbg) VoxyEntityLOD.LOGGER.info("CCDBG id={} removed={} realPresent={} d2={} ecCulled={} vis={}",
+					id, entity.isRemoved(), level.getEntity(id) != null, (int) entity.distanceToSqr(player),
+					ecCulled(level.getEntity(id)),
+					frustum != null && frustum.isVisible(entity.getBoundingBoxForCulling()));
 
 				if (entity.isRemoved()) {
 					CONTRAPTIONS.remove(id);
@@ -176,6 +183,7 @@ public final class RemoteContraptionRenderer {
 				}
 			}
 		} catch (LinkageError ex) {
+			VoxyEntityLOD.LOGGER.error("CC kill-switch tripped: LinkageError in contraption render — all contraptions will stop rendering until relog", ex);
 			createUnavailable = true;
 			CONTRAPTIONS.clear();
 		}
@@ -183,6 +191,8 @@ public final class RemoteContraptionRenderer {
 
 	private static boolean ecLoaded;
 	private static java.lang.reflect.Method ecMethod;
+	private static final boolean DEBUG = Boolean.getBoolean("voxyentitylod.debug");
+	private static long debugFrame;
 	static {
 		try {
 			var c = Class.forName("dev.tr7zw.entityculling.access.Cullable");
