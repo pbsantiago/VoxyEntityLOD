@@ -16,7 +16,7 @@ public class MixinEntityRenderDispatcher {
 	// Hide the vanilla entity render once the mod copy takes over (>= 3rd chunk).
 	// The mod copy itself goes through this same dispatcher — guard it by identity:
 	// only the REAL entity (level.getEntity(id) == entity) can be cancelled.
-	@Inject(method = "render(Lnet/minecraft/world/entity/Entity;DDDFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+	@Inject(method = "render(Lnet/minecraft/world/entity/Entity;DDDFFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
 			at = @At("HEAD"), cancellable = true)
 	private void voxyentitylod$hideVanilla(
 			Entity entity, double x, double y, double z, float yRot, float tickDelta,
