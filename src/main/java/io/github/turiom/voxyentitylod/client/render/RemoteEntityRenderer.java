@@ -36,12 +36,18 @@ public class RemoteEntityRenderer {
 	// A LivingEntity's body/head orientation comes from yBodyRot/yHeadRot — the
 	// vanilla tick keeps them in sync with yRot. A static copy never ticks, so we
 	// set all three explicitly or every copy would face the same way (all zeros).
+	// The renderer orients with lerp(yBodyRotO, yBodyRot, tick): the "previous"
+	// fields must follow too, or the lerp swings the body between 0 and the target
+	// every client tick (flickering between the old and the correct facing).
 	public static void applyRotation(Entity entity, float yRot, float xRot) {
 		entity.setYRot(yRot);
+		entity.yRotO = yRot; // entity.yRotO / xRotO are fields in mojmap
 		entity.setXRot(xRot);
 		if (entity instanceof net.minecraft.world.entity.LivingEntity le) {
 			le.setYHeadRot(yRot);
+			le.yHeadRotO = yRot;
 			le.setYBodyRot(yRot);
+			le.yBodyRotO = yRot;
 		}
 	}
 
