@@ -37,13 +37,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * Stores remote contraption entities (outside vanilla tracking range) and renders them
  * using Create's own {@link ContraptionEntityRenderer} buffer pipeline, ignoring Flywheel
  * on purpose (a locally-synthesized entity has no Flywheel visual).
- * <p>
- *           entry point is guarded once and disabled via {@code createUnavailable}.
  */
 @Environment(EnvType.CLIENT)
 public final class RemoteContraptionRenderer {
 	private static final Map<Integer, ContraptionState> CONTRAPTIONS = new ConcurrentHashMap<>();
-
+	private static final Map<Integer, Boolean> prevVisMap = new ConcurrentHashMap<>();
 
 	private static boolean createUnavailable;
 
@@ -83,6 +81,7 @@ public final class RemoteContraptionRenderer {
 
 	public static void removeContraption(int id) {
 		CONTRAPTIONS.remove(id);
+		prevVisMap.remove(id);
 	}
 
 	// null when unknown: lets callers inspect the copy (e.g. type check on id reuse).
@@ -103,31 +102,34 @@ public final class RemoteContraptionRenderer {
 
 		try {
 			double maxBlocks;
-		try { maxBlocks = VoxyConfig.CONFIG.sectionRenderDistance * 512; }
-		catch (Exception | Error e) { return; }
-		double lod1 = maxBlocks * 0.04;
-		double maxSq = maxBlocks * maxBlocks;
+			try { maxBlocks = VoxyConfig.CONFIG.sectionRenderDistance * 512; }
+			catch (Exception | Error e) { return; }
+			double lod1 = maxBlocks * 0.04;
+			double maxSq = maxBlocks * maxBlocks;
 
 			// Remote path — contraptions the server handed us (beyond its tracking range).
-			boolean dbg = DEBUG && ((++debugFrame & 31) == 0);
 			for (var entry : CONTRAPTIONS.entrySet()) {
 				int id = entry.getKey();
 				var state = entry.getValue();
 				var entity = state.entity();
 
-				if (dbg) VoxyEntityLOD.LOGGER.info("CCDBG id={} removed={} realPresent={} d2={} ecCulled={} vis={}",
-					id, entity.isRemoved(), level.getEntity(id) != null, (int) entity.distanceToSqr(player),
-					ecCulled(level.getEntity(id)),
-					frustum != null && frustum.isVisible(entity.getBoundingBoxForCulling()));
+				boolean nowVis = frustum != null && frustum.isVisible(entity.getBoundingBoxForCulling());
+				Boolean prevVis = prevVisMap.get(id);
+				if (DEBUG && (prevVis == null || prevVis != nowVis)) {
+					VoxyEntityLOD.LOGGER.info("CCDBG id={} TRANSITION vis={} removed={} realPresent={} d2={} ecCulled={}, size={}",
+						id, nowVis, entity.isRemoved(), level.getEntity(id) != null, (int) entity.distanceToSqr(player),
+						ecCulled(level.getEntity(id)), CONTRAPTIONS.size());
+				}
+				if (DEBUG) prevVisMap.put(id, nowVis);
 
 				if (entity.isRemoved()) {
 					if (DEBUG) VoxyEntityLOD.LOGGER.warn("CCDBG id={} REMOVED — copy dropped permanently", id);
 					CONTRAPTIONS.remove(id);
+					prevVisMap.remove(id);
 					continue;
 				}
 
-				// Remover aqui destrói a cópia e, quando o real sai de novo, nem cópia nem live pass
-				// existem → nada renderiza. Manter = handover nos dois sentidos (inclusive retorno).
+				// Manter = handover nos dois sentidos (inclusive retorno).
 				if (level.getEntity(id) != null)
 					continue;
 
@@ -140,6 +142,7 @@ public final class RemoteContraptionRenderer {
 				if (RemoteEntityRenderer.superseded(entity)) {
 					if (DEBUG) VoxyEntityLOD.LOGGER.warn("CCDBG id={} SUPERSEDED — copy dropped permanently", id);
 					CONTRAPTIONS.remove(id);
+					prevVisMap.remove(id);
 					continue;
 				}
 				if (ecCulled(level.getEntity(entity.getId()))) {
@@ -156,11 +159,7 @@ public final class RemoteContraptionRenderer {
 			}
 
 			// Live pass — closes the gap where some Create contraptions stop rendering
-			// BEFORE the client's render distance (frustum far plane / Create's own cull)
-			// while the server still tracks them: vanilla draws nothing and the remote
-			// path above isn't populated yet. Render straight from the tracked copy.
-			// prefetched copy exists — the copy only takes over once the real leaves the
-			// client (presence-based ownership, no frustum dependence for exclusivity).
+			// BEFORE the client's render distance while the server still tracks them.
 			double liveBox = mc.options.getEffectiveRenderDistance() * 16 * 2;
 			var box = AABB.ofSize(cameraPos, liveBox * 2, liveBox * 2, liveBox * 2);
 			for (var e : level.getEntitiesOfClass(AbstractContraptionEntity.class, box)) {
@@ -171,9 +170,6 @@ public final class RemoteContraptionRenderer {
 					continue;
 				double d2 = e.distanceToSqr(player);
 				if (ecCulled(level.getEntity(e.getId()))) continue;
-				// vanilla ainda desenha (dentro do frustum): salta (não sobrepor); o live
-				// pass cuida do real no instante exato em que o vanilla cull (sem banda
-				// dura de raio — o frustum JÁ é a borda, evita o buraco de 1 chunk).
 				if (frustum != null && frustum.isVisible(e.getBoundingBoxForCulling()))
 					continue;
 				if (d2 > maxSq) continue;
@@ -191,13 +187,13 @@ public final class RemoteContraptionRenderer {
 			VoxyEntityLOD.LOGGER.error("CC kill-switch tripped: LinkageError in contraption render — all contraptions will stop rendering until relog", ex);
 			createUnavailable = true;
 			CONTRAPTIONS.clear();
+			prevVisMap.clear();
 		}
 	}
 
 	private static boolean ecLoaded;
 	private static java.lang.reflect.Method ecMethod;
 	private static final boolean DEBUG = Boolean.getBoolean("voxyentitylod.debug");
-	private static long debugFrame;
 	static {
 		try {
 			var c = Class.forName("dev.tr7zw.entityculling.access.Cullable");
@@ -218,9 +214,7 @@ public final class RemoteContraptionRenderer {
 		ClientContraption cc = contraption.getOrCreateClientContraptionLazy();
 		VirtualRenderWorld renderWorld = cc.getRenderLevel();
 
-		// live lerp/rotation (e.g. fast-spinning bearings) renders as a static contraption.
-		// yaw/pitch were frozen at load, and at partialTicks=1.0 getViewYRot/translateToEntity
-		// read the current (frozen) value directly instead of lerping prev->cur.
+		// yaw/pitch frozen at load; partialTicks=1.0 reads the frozen values directly.
 		float partialTicks = 1.0F;
 		PoseStack model = new PoseStack();
 		entity.applyLocalTransforms(model, partialTicks);
@@ -242,9 +236,6 @@ public final class RemoteContraptionRenderer {
 
 		camera.popPose();
 	}
-
-
-
 
 	private static void drawContraptionBlock(AbstractContraptionEntity entity, PoseStack camera,
 			MultiBufferSource.BufferSource buffers, Vec3 cameraPos, int r, int g, int b) {
