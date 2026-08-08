@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "voxyentitylod",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": ["Turiom"],
+  "contact": {},
+  "license": "LGPL-3.0",
+  "icon": "assets/voxyentitylod/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "io.github.turiom.voxyentitylod.client.VoxyEntityLODClient"
+    ],
+    "main": [
+      "io.github.turiom.voxyentitylod.VoxyEntityLOD"
+    ]
+  },
+  "mixins": ["voxyentitylod.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.14.22",
+    "minecraft": ["1.20.1"],
+    "fabric-api": ">=0.91.1",
+    "voxy": ">=0.2.0"
+  },
+  "suggests": {
+    "create": "*"
+  }
+}
