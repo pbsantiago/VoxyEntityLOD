@@ -13,15 +13,22 @@ public class LODEntityRenderingS2CEntityTickPacket implements LODEntityRendering
 
 	private final int entityId;
 	private final @NotNull Vector3f entityPosition;
+	private final float entityYRot;
+	private final float entityXRot;
 
-	public LODEntityRenderingS2CEntityTickPacket(int entityId, @NotNull Vector3f entityPosition) {
+	public LODEntityRenderingS2CEntityTickPacket(int entityId, @NotNull Vector3f entityPosition,
+			float entityYRot, float entityXRot) {
 		this.entityId = entityId;
 		this.entityPosition = entityPosition;
+		this.entityYRot = entityYRot;
+		this.entityXRot = entityXRot;
 	}
 
 	public LODEntityRenderingS2CEntityTickPacket(@NotNull FriendlyByteBuf buf) {
 		this.entityId = buf.readInt();
 		this.entityPosition = buf.readVector3f();
+		this.entityYRot = buf.readFloat();
+		this.entityXRot = buf.readFloat();
 	}
 
 	public static @NotNull ResourceLocation getId() { return ID; }
@@ -31,9 +38,13 @@ public class LODEntityRenderingS2CEntityTickPacket implements LODEntityRendering
 		var buf = new FriendlyByteBuf(Unpooled.buffer());
 		buf.writeInt(entityId);
 		buf.writeVector3f(entityPosition);
+		buf.writeFloat(entityYRot);
+		buf.writeFloat(entityXRot);
 		return buf;
 	}
 
 	public int getEntityId() { return entityId; }
 	public @NotNull Vector3f getEntityPosition() { return entityPosition; }
+	public float getEntityYRot() { return entityYRot; }
+	public float getEntityXRot() { return entityXRot; }
 }

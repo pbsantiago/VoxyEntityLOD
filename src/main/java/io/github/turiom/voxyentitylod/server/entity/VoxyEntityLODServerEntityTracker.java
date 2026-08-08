@@ -170,7 +170,8 @@ public class VoxyEntityLODServerEntityTracker {
 							var pos = entity.position();
 							ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityTickPacket.getId(),
 									new LODEntityRenderingS2CEntityTickPacket(
-											entityId, new Vector3f((float) pos.x, (float) pos.y, (float) pos.z)).writeBuf());
+											entityId, new Vector3f((float) pos.x, (float) pos.y, (float) pos.z),
+											entity.getYRot(), entity.getXRot()).writeBuf());
 						}
 					}
 
@@ -331,7 +332,8 @@ public class VoxyEntityLODServerEntityTracker {
 		var pos = entity.position();
 		ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityTickPacket.getId(),
 				new LODEntityRenderingS2CEntityTickPacket(
-						entity.getId(), new Vector3f((float) pos.x, (float) pos.y, (float) pos.z)).writeBuf());
+						entity.getId(), new Vector3f((float) pos.x, (float) pos.y, (float) pos.z),
+						entity.getYRot(), entity.getXRot()).writeBuf());
 	}
 
 	private void sendContraptionLoad(@NotNull ServerPlayer player, @NotNull AbstractContraptionEntity entity) {

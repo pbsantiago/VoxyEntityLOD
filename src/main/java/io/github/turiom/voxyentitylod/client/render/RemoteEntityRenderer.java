@@ -25,18 +25,12 @@ public class RemoteEntityRenderer {
 	public static Entity get(int id) { return ENTITIES.get(id); }
 	public static void remove(int id) { ENTITIES.remove(id); }
 
-	public static void updatePosition(int id, Vector3f pos) {
+	public static void updatePosition(int id, Vector3f pos, float yRot, float xRot) {
 		var entity = ENTITIES.get(id);
 		if (entity == null) return;
-		double dx = pos.x() - entity.getX(), dy = pos.y() - entity.getY(), dz = pos.z() - entity.getZ();
 		entity.setPos(pos.x(), pos.y(), pos.z());
-		// Static copy, no sim: with the vanilla real gone there is nothing to sync
-		// rotation from — aim the head along the travel direction instead.
-		var mc = Minecraft.getInstance();
-		if (mc.level != null && mc.level.getEntity(id) == null && (dx*dx+dz*dz) > 0.01f) {
-			entity.setYRot((float)(Math.atan2(-dx, dz) * 180.0 / Math.PI));
-			entity.setXRot((float)(Math.atan2(-dy, Math.sqrt(dx*dx+dz*dz)) * 180.0 / Math.PI));
-		}
+		entity.setYRot(yRot);
+		entity.setXRot(xRot);
 	}
 
 	private static int[] entityColor(Entity entity) {

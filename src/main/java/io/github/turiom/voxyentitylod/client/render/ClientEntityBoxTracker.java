@@ -35,7 +35,8 @@ public class ClientEntityBoxTracker {
 				LODEntityRenderingS2CEntityTickPacket.getId(),
 				(client, handler, buf, sender) -> {
 					var p = new LODEntityRenderingS2CEntityTickPacket(buf);
-					client.execute(() -> RemoteEntityRenderer.updatePosition(p.getEntityId(), p.getEntityPosition()));
+					client.execute(() -> RemoteEntityRenderer.updatePosition(
+							p.getEntityId(), p.getEntityPosition(), p.getEntityYRot(), p.getEntityXRot()));
 				});
 		ClientPlayNetworking.registerGlobalReceiver(
 				LODContraptionRenderingS2CContraptionLoadPacket.getId(),
