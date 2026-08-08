@@ -137,6 +137,7 @@ public class VoxyEntityLODServerEntityTracker {
 			if (tickCounter % PREFETCH_INTERVAL == 0) {
 				for (var world : server.getAllLevels()) {
 					for (var player : world.players()) {
+						pruneTracked(player, world);
 						var playerPos = player.position();
 						var box = AABB.ofSize(playerPos, rangeBlocks * 2, rangeBlocks * 2, rangeBlocks * 2);
 						for (var entity : world.getEntitiesOfClass(Entity.class, box)) {
@@ -200,6 +201,26 @@ public class VoxyEntityLODServerEntityTracker {
 				}
 			}
 		});
+	}
+
+	private void pruneTracked(@NotNull ServerPlayer player, @NotNull ServerLevel world) {
+		prune(world, player, playerTracked.get(player.getUUID()));
+		prune(world, player, contraptionTracked.get(player.getUUID()));
+	}
+
+	// Death path: ENTITY_UNLOAD only fires for chunks the vanilla tracker tracks (view
+	// distance). Mobs the mod renders beyond that (sim-distance only) die via stopTicking
+	// with NO Fabric event — their copies would freeze and render forever. Periodic sweep:
+	// server entity gone => kill the client copy now.
+	private void prune(@NotNull ServerLevel world, @NotNull ServerPlayer player, @Nullable Set<Integer> set) {
+		if (set == null) return;
+		for (var it = set.iterator(); it.hasNext();) {
+			int id = it.next();
+			if (world.getEntity(id) != null) continue;
+			ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityUnloadPacket.getId(),
+					new LODEntityRenderingS2CEntityUnloadPacket(id).writeBuf());
+			it.remove();
+		}
 	}
 
 	private void updateRange(net.minecraft.server.MinecraftServer server) {

@@ -56,16 +56,21 @@ public class ClientEntityBoxTracker {
 		var level = Minecraft.getInstance().level;
 		if (level == null) return;
 
+		var entityType = BuiltInRegistries.ENTITY_TYPE.get(p.getEntityTextureId());
+		if (entityType == null) return;
+
 		int id = p.getEntityId();
 		// If already tracked, just update position — preserves instance.
 		var existing = RemoteEntityRenderer.get(id);
 		if (existing != null) {
-			existing.setPos(p.getEntityPosition().x(), p.getEntityPosition().y(), p.getEntityPosition().z());
-			return;
+			// Same id re-used by a different type after a despawn: drop the old copy, or
+			// the dead entity keeps rendering in place of the new one.
+			if (existing.getType() == entityType) {
+				existing.setPos(p.getEntityPosition().x(), p.getEntityPosition().y(), p.getEntityPosition().z());
+				return;
+			}
+			RemoteEntityRenderer.remove(id);
 		}
-
-		var entityType = BuiltInRegistries.ENTITY_TYPE.get(p.getEntityTextureId());
-		if (entityType == null) return;
 
 		Entity entity;
 		try {
@@ -97,16 +102,21 @@ public class ClientEntityBoxTracker {
 		var level = Minecraft.getInstance().level;
 		if (level == null) return;
 
+		var entityType = BuiltInRegistries.ENTITY_TYPE.get(p.getEntityTypeId());
+		if (entityType == null) return;
+
 		int id = p.getEntityId();
 
 		// If already tracked, just update — preserves the rebuilt Contraption instance.
-		if (RemoteContraptionRenderer.contains(id)) {
-			RemoteContraptionRenderer.updateContraption(id, p.getEntityPosition(), p.getYaw(), p.getPitch());
-			return;
+		var existing = RemoteContraptionRenderer.get(id);
+		if (existing != null) {
+			// Same id re-used by a different type after a despawn: stale copy must go.
+			if (existing.getType() == entityType) {
+				RemoteContraptionRenderer.updateContraption(id, p.getEntityPosition(), p.getYaw(), p.getPitch());
+				return;
+			}
+			RemoteContraptionRenderer.removeContraption(id);
 		}
-
-		var entityType = BuiltInRegistries.ENTITY_TYPE.get(p.getEntityTypeId());
-		if (entityType == null) return;
 
 		Entity entity;
 		try {

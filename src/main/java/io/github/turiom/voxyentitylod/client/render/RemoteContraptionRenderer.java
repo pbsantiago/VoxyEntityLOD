@@ -7,6 +7,7 @@ import net.createmod.catnip.render.SuperByteBuffer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -83,10 +84,11 @@ public final class RemoteContraptionRenderer {
 		CONTRAPTIONS.remove(id);
 	}
 
-	public static boolean contains(int id) {
-		return CONTRAPTIONS.containsKey(id);
+	// null when unknown: lets callers inspect the copy (e.g. type check on id reuse).
+	public static @Nullable AbstractContraptionEntity get(int id) {
+		var s = CONTRAPTIONS.get(id);
+		return s == null ? null : s.entity();
 	}
-
 
 	public static void render(PoseStack camera, MultiBufferSource.BufferSource buffers, Vec3 cameraPos, float tickDelta, Frustum frustum) {
 		if (createUnavailable)
