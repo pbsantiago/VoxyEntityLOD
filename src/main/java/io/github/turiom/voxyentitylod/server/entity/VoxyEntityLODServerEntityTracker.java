@@ -17,6 +17,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
@@ -97,7 +98,12 @@ public class VoxyEntityLODServerEntityTracker {
 		//  itself is the correct invalidation point.)
 		ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
 			int id = entity.getId();
-			var server = world.getServer();
+			// Tell every player who holds a copy to drop it — despawn would otherwise
+			// leave a frozen ghost rendering forever (server stops TICKs, copy never dies).
+			for (var player : world.players())
+				if (isTracked(player, entity))
+					ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityUnloadPacket.getId(),
+							new LODEntityRenderingS2CEntityUnloadPacket(id).writeBuf());
 			for (var uuid : playerTracked.keySet())
 				if (playerTracked.get(uuid) != null) playerTracked.get(uuid).remove(id);
 			for (var uuid : contraptionTracked.keySet())
@@ -242,6 +248,7 @@ public class VoxyEntityLODServerEntityTracker {
 	}
 
 	private void startTracking(@NotNull ServerPlayer player, @NotNull Entity entity) {
+		if (entity instanceof ItemEntity) return; // dropped items: vanilla range is enough, LOD copy looks wrong
 		// rebuild them out of render distance. Only handles loaded Create contraptions.
 		if (createLoaded && entity instanceof AbstractContraptionEntity) {
 			startTrackingContraption(player, (AbstractContraptionEntity) entity);
@@ -265,6 +272,7 @@ public class VoxyEntityLODServerEntityTracker {
 	}
 
 	private void startPrefetchEntity(@NotNull ServerPlayer player, @NotNull Entity entity) {
+		if (entity instanceof ItemEntity) return; // keep dropped items out of the LOD pipeline
 		sendEntityLoad(player, entity);
 		prefetchSet.computeIfAbsent(player.getUUID(), k -> new HashSet<>()).add(entity.getId());
 	}

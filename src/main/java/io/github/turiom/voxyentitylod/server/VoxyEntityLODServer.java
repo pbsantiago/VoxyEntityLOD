@@ -7,7 +7,7 @@ public class VoxyEntityLODServer {
 	private static VoxyEntityLODServerEntityTracker tracker;
 
 	public static void initialize() {
-		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			int renderDistance = server.getPlayerList().getViewDistance();
 			tracker = new VoxyEntityLODServerEntityTracker(renderDistance);
 		});
