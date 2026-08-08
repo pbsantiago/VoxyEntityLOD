@@ -170,10 +170,12 @@ public final class RemoteContraptionRenderer {
 					continue;
 				double d2 = e.distanceToSqr(player);
 				if (ecCulled(level.getEntity(e.getId()))) continue;
+				// vanilla ainda desenha (dentro do frustum): pula (não sobrepor); fora do
+				// frustum o vanilla culla E a passada live assume — sem estado, per-frame,
+				// então voltar a olhar restaura o desenho imediatamente.
 				if (frustum != null && frustum.isVisible(e.getBoundingBoxForCulling()))
 					continue;
 				if (d2 > maxSq) continue;
-				if (frustum != null && !frustum.isVisible(e.getBoundingBoxForCulling())) continue;
 				double l1sq = lod1 * lod1;
 				int hc = e.getType().hashCode();
 				int hcr = (hc>>16)&0xFF, hcg = (hc>>8)&0xFF, hcb = hc&0xFF;
