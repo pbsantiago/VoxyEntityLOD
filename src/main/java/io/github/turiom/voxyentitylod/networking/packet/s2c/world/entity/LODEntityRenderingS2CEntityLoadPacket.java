@@ -19,13 +19,16 @@ public class LODEntityRenderingS2CEntityLoadPacket implements LODEntityRendering
 	private final @NotNull Vector3f entityBoundingBoxMin;
 	private final @NotNull Vector3f entityBoundingBoxMax;
 	private final @Nullable CompoundTag entityNbt;
+	private final float entityYRot;
+	private final float entityXRot;
 
 	public LODEntityRenderingS2CEntityLoadPacket(
 			int entityId, @NotNull ResourceLocation entityTextureId,
 			@NotNull Vector3f entityPosition,
 			@NotNull Vector3f entityBoundingBoxMin,
 			@NotNull Vector3f entityBoundingBoxMax,
-			@Nullable CompoundTag entityNbt
+			@Nullable CompoundTag entityNbt,
+			float entityYRot, float entityXRot
 	) {
 		this.entityId = entityId;
 		this.entityTextureId = entityTextureId;
@@ -33,6 +36,8 @@ public class LODEntityRenderingS2CEntityLoadPacket implements LODEntityRendering
 		this.entityBoundingBoxMin = entityBoundingBoxMin;
 		this.entityBoundingBoxMax = entityBoundingBoxMax;
 		this.entityNbt = entityNbt;
+		this.entityYRot = entityYRot;
+		this.entityXRot = entityXRot;
 	}
 
 	public LODEntityRenderingS2CEntityLoadPacket(@NotNull FriendlyByteBuf buf) {
@@ -42,6 +47,8 @@ public class LODEntityRenderingS2CEntityLoadPacket implements LODEntityRendering
 		this.entityBoundingBoxMin = buf.readVector3f();
 		this.entityBoundingBoxMax = buf.readVector3f();
 		this.entityNbt = buf.readNbt();
+		this.entityYRot = buf.readFloat();
+		this.entityXRot = buf.readFloat();
 	}
 
 	public static @NotNull ResourceLocation getId() { return ID; }
@@ -55,6 +62,8 @@ public class LODEntityRenderingS2CEntityLoadPacket implements LODEntityRendering
 		buf.writeVector3f(entityBoundingBoxMin);
 		buf.writeVector3f(entityBoundingBoxMax);
 		buf.writeNbt(entityNbt);
+		buf.writeFloat(entityYRot);
+		buf.writeFloat(entityXRot);
 		return buf;
 	}
 
@@ -64,4 +73,6 @@ public class LODEntityRenderingS2CEntityLoadPacket implements LODEntityRendering
 	public @NotNull Vector3f getEntityBoundingBoxMin() { return entityBoundingBoxMin; }
 	public @NotNull Vector3f getEntityBoundingBoxMax() { return entityBoundingBoxMax; }
 	public @Nullable CompoundTag getEntityNbt() { return entityNbt; }
+	public float getEntityYRot() { return entityYRot; }
+	public float getEntityXRot() { return entityXRot; }
 }

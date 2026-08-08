@@ -161,10 +161,15 @@ public class VoxyEntityLODServerEntityTracker {
 					var playerPos = player.position();
 					var tracked = playerTracked.get(player.getUUID());
 					var contraptions = contraptionTracked.get(player.getUUID());
+					var prefetched = prefetchSet.get(player.getUUID());
 
-					// Send position TICK for already-tracked entities
-					if (tracked != null) {
-						for (int entityId : tracked) {
+					// Send position TICK for already-tracked entities, plus prefetched
+					// ones (their copies exist on the client and must keep orientation).
+					if (tracked != null || prefetched != null) {
+						var ids = new java.util.HashSet<Integer>();
+						if (tracked != null) ids.addAll(tracked);
+						if (prefetched != null) ids.addAll(prefetched);
+						for (int entityId : ids) {
 							var entity = world.getEntity(entityId);
 							if (entity == null) continue;
 							var pos = entity.position();
@@ -324,7 +329,8 @@ public class VoxyEntityLODServerEntityTracker {
 						new Vector3f((float) pos.x, (float) pos.y, (float) pos.z),
 						new Vector3f((float) (bb.minX - pos.x), (float) (bb.minY - pos.y), (float) (bb.minZ - pos.z)),
 						new Vector3f((float) (bb.maxX - pos.x), (float) (bb.maxY - pos.y), (float) (bb.maxZ - pos.z)),
-						nbt
+						nbt,
+						entity.getYRot(), entity.getXRot()
 				).writeBuf());
 	}
 

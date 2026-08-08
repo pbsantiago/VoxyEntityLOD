@@ -84,6 +84,8 @@ public class ClientEntityBoxTracker {
 
 		entity.setId(id);
 		entity.setPos(p.getEntityPosition().x(), p.getEntityPosition().y(), p.getEntityPosition().z());
+		entity.setYRot(p.getEntityYRot());
+		entity.setXRot(p.getEntityXRot());
 
 		// renders black. Pos/UUID/Motion/Rotation already stripped server-side.
 		var nbt = p.getEntityNbt();

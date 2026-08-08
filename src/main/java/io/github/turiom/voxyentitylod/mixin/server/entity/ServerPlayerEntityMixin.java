@@ -52,7 +52,8 @@ public abstract class ServerPlayerEntityMixin {
 					new Vector3f((float) pos.x, (float) pos.y, (float) pos.z),
 					new Vector3f((float) (bb.minX - pos.x), (float) (bb.minY - pos.y), (float) (bb.minZ - pos.z)),
 					new Vector3f((float) (bb.maxX - pos.x), (float) (bb.maxY - pos.y), (float) (bb.maxZ - pos.z)),
-					null
+					null,
+					self.getYRot(), self.getXRot()
 			).writeBuf();
 			for (var player : world.players()) {
 				if (player == self || player.isSpectator()) continue;
