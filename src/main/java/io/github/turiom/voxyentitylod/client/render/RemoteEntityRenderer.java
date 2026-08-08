@@ -158,11 +158,12 @@ public class RemoteEntityRenderer {
 			// Frustum cull
 			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 
-			// Presence gate: skip copy when real is close and visible (vanilla renders)
+			// Presence gate: vanilla stays in charge up to 2 chunks (32). Past that the
+			// copy renders — and MixinEntityRenderDispatcher hides the vanilla there.
 			var real=level.getEntity(entity.getId());
 			if (real!=null) {
 				entity.setYRot(real.getYRot()); entity.setXRot(real.getXRot());
-				if (real.distanceToSqr(player) < 64*64
+				if (real.distanceToSqr(player) < 32*32
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
 
