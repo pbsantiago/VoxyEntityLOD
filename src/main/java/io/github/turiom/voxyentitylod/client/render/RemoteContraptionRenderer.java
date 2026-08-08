@@ -121,6 +121,7 @@ public final class RemoteContraptionRenderer {
 					frustum != null && frustum.isVisible(entity.getBoundingBoxForCulling()));
 
 				if (entity.isRemoved()) {
+					if (DEBUG) VoxyEntityLOD.LOGGER.warn("CCDBG id={} REMOVED — copy dropped permanently", id);
 					CONTRAPTIONS.remove(id);
 					continue;
 				}
@@ -137,10 +138,14 @@ public final class RemoteContraptionRenderer {
 				double d2 = entity.distanceToSqr(player);
 				if (d2 > maxSq) continue;
 				if (RemoteEntityRenderer.superseded(entity)) {
+					if (DEBUG) VoxyEntityLOD.LOGGER.warn("CCDBG id={} SUPERSEDED — copy dropped permanently", id);
 					CONTRAPTIONS.remove(id);
 					continue;
 				}
-				if (ecCulled(level.getEntity(entity.getId()))) continue;
+				if (ecCulled(level.getEntity(entity.getId()))) {
+					if (DEBUG) VoxyEntityLOD.LOGGER.info("CCDBG id={} ecCulled — skip this frame", id);
+					continue;
+				}
 				if (frustum != null && !frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 				double l1sq = lod1 * lod1;
 				if (d2 <= l1sq) {
