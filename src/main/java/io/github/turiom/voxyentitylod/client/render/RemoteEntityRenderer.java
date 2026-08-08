@@ -29,8 +29,19 @@ public class RemoteEntityRenderer {
 		var entity = ENTITIES.get(id);
 		if (entity == null) return;
 		entity.setPos(pos.x(), pos.y(), pos.z());
+		applyRotation(entity, yRot, xRot);
+	}
+
+	// A LivingEntity's body/head orientation comes from yBodyRot/yHeadRot — the
+	// vanilla tick keeps them in sync with yRot. A static copy never ticks, so we
+	// set all three explicitly or every copy would face the same way (all zeros).
+	public static void applyRotation(Entity entity, float yRot, float xRot) {
 		entity.setYRot(yRot);
 		entity.setXRot(xRot);
+		if (entity instanceof net.minecraft.world.entity.LivingEntity le) {
+			le.setYHeadRot(yRot);
+			le.setYBodyRot(yRot);
+		}
 	}
 
 	private static int[] entityColor(Entity entity) {
@@ -165,7 +176,7 @@ public class RemoteEntityRenderer {
 			// copy renders — and MixinEntityRenderDispatcher hides the vanilla there.
 			var real=level.getEntity(entity.getId());
 			if (real!=null) {
-				entity.setYRot(real.getYRot()); entity.setXRot(real.getXRot());
+				applyRotation(entity, real.getYRot(), real.getXRot());
 				if (real.distanceToSqr(player) < 32*32
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
