@@ -1,5 +1,6 @@
 package io.github.turiom.voxyentitylod.client.render;
 
+import io.github.turiom.voxyentitylod.VoxyEntityLOD;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import me.cortex.voxy.client.config.VoxyConfig;
@@ -162,6 +163,7 @@ public class RemoteEntityRenderer {
 		for (var entry : ENTITIES.entrySet()) {
 			var entity=entry.getValue();
 			if (entity.isRemoved()) continue;
+			boolean dbg = DEBUG && (++debugFrame & 19) == 0;
 
 			// EntityCulling: skip if the real entity is hidden behind solid geometry
 			if (ecCulled(level.getEntity(entity.getId()))) continue;
@@ -185,6 +187,16 @@ public class RemoteEntityRenderer {
 			if (dist>maxBlocks) continue;
 			if (superseded(entity)) { ENTITIES.remove(entry.getKey()); continue; }
 
+			if (dbg && (entity.getId() % 17) == 0) {
+				VoxyEntityLOD.LOGGER.info("LODRW id={} dist={} real={} yCopy={} yReal={} body={} head={}",
+					entity.getId(), (int) dist, real != null,
+					entity.getYRot(), real != null ? real.getYRot() : Float.NaN,
+					entity instanceof net.minecraft.world.entity.LivingEntity le
+						? le.yBodyRot : Float.NaN,
+					entity instanceof net.minecraft.world.entity.LivingEntity le2
+						? le2.yHeadRot : Float.NaN);
+			}
+
 			if (dist<=lod1) {
 				double rx=entity.getX()-cameraPos.x, ry=entity.getY()-cameraPos.y, rz=entity.getZ()-cameraPos.z;
 				matrices.pushPose();
@@ -195,4 +207,7 @@ public class RemoteEntityRenderer {
 			}
 		}
 	}
+
+	private static final boolean DEBUG = Boolean.getBoolean("voxyentitylod.debug");
+	private static long debugFrame;
 }
