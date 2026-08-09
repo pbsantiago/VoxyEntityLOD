@@ -177,12 +177,13 @@ public class RemoteEntityRenderer {
 			// Frustum cull
 			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 
-			// Presence gate: vanilla stays in charge up to 2 chunks (32). Past that the
-			// copy renders — and MixinEntityRenderDispatcher hides the vanilla there.
+			// Presence gate: vanilla renders chunks 1-2. Policy: vanilla stays in charge up
+			// to 3 chunks (48); from the 3rd chunk on the mod takes over — the
+			// copy renders and MixinEntityRenderDispatcher hides the vanilla there.
 			var real=level.getEntity(entity.getId());
 			if (real!=null) {
 				applyRotation(entity, real.getYRot(), real.getXRot());
-				if (real.distanceToSqr(player) < 32*32
+				if (real.distanceToSqr(player) < 48*48
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
 
