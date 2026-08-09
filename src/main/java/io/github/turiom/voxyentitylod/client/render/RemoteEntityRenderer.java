@@ -201,8 +201,11 @@ public class RemoteEntityRenderer {
 			// Skip underground entities (caves) — save GPU
 			if (isUnderground(entity, mc)) continue;
 
-			// EntityCulling: skip if the real entity is hidden behind solid geometry
-			if (ecCulled(level.getEntity(entity.getId()))) continue;
+			// ponytail: ecCulled REMOVED here — it only fires when the real entity is present
+			// (real==null → false) and its entity-culling raycast flips per frame around fences/
+			// walls (villagers, llamas, pigs in pens), hiding the copy while the mixin already
+			// cancelled the real → flicker. Depth buffer handles occlusion; the 1 draw saved is
+			// not worth it. (Still used for contraptions where it's a no-op with real absent.)
 
 			if (dbg && (entity.getId() % 17) == 0) {
 				VoxyEntityLOD.LOGGER.info("LODRW id={} dist={} real={} yCopy={} yReal={} body={} head={}",
