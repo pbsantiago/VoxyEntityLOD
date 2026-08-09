@@ -93,17 +93,15 @@ public class VoxyEntityLODServerEntityTracker {
 
 		// Entity unloaded server-side (chunk unload / despawn): the real is gone for good —
 		// a re-load later spawns a NEW id. Drop the stale copy now, or the old id lingers
-		// and double-renders next to the new vanilla real when the player returns.
-		// (NOT UNLOAD on START_TRACKING — that painted the 1-chunk gap; unload of the entity
-		//  itself is the correct invalidation point.)
+		// not the correct invalidation point: ENTITY_UNLOAD also fires on CHUNK UNLOAD — when the
+		// contraption/entity crosses the sim-distance chunk border, its chunk unloads and the real
+		// stalls server-side. Sending UNLOAD there kills the copy exactly at the chunk border → the
+		// reported "some quando troca de chunk" (old code didn't send UNLOAD; that's why it worked).
+		// ponytail: keep copies alive on chunk unload; despawn ghosts eventually get cleaned by the
+		// id-reuse check on the next Load (ClientEntityBoxTracker). Trade-off: a truly despawned
+		// entity keeps its static wool copy until the player returns — cheap, invisible-enough.
 		ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
 			int id = entity.getId();
-			// Tell every player who holds a copy to drop it — despawn would otherwise
-			// leave a frozen ghost rendering forever (server stops TICKs, copy never dies).
-			for (var player : world.players())
-				if (isTracked(player, entity))
-					ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityUnloadPacket.getId(),
-							new LODEntityRenderingS2CEntityUnloadPacket(id).writeBuf());
 			for (var uuid : playerTracked.keySet())
 				if (playerTracked.get(uuid) != null) playerTracked.get(uuid).remove(id);
 			for (var uuid : contraptionTracked.keySet())
@@ -220,11 +218,12 @@ public class VoxyEntityLODServerEntityTracker {
 	// server entity gone => kill the client copy now.
 	private void prune(@NotNull ServerLevel world, @NotNull ServerPlayer player, @Nullable Set<Integer> set) {
 		if (set == null) return;
+		// ponytail: drop from the tracking set WITHOUT an UNLOAD packet — the same chunk-unload
+		// problem as ENTITY_UNLOAD would kill the copy at the sim-distance border. The copy on the
+		// client persists as a static wool (cheap, imperceptible) and gets replaced on the next Load.
 		for (var it = set.iterator(); it.hasNext();) {
 			int id = it.next();
 			if (world.getEntity(id) != null) continue;
-			ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityUnloadPacket.getId(),
-					new LODEntityRenderingS2CEntityUnloadPacket(id).writeBuf());
 			it.remove();
 		}
 	}

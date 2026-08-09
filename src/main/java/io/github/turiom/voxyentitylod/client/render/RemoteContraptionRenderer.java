@@ -59,6 +59,10 @@ public final class RemoteContraptionRenderer {
 			return;
 		ace.setYRot(yaw);
 		ace.setXRot(pitch);
+		// ponytail: a cópia nasce com bb degenerado — contraption.bounds não é persistido no
+		// read do NBT, então setPos() retorna sem setar o bb. Re-força a atualização: o wool
+		// (drawContraptionBlock) mede o bb e sumiria silenciosamente no handover da borda do chunk.
+		ace.setPos(ace.getX(), ace.getY(), ace.getZ());
 		int r=150,g=150,b=150;
 		try {
 			var blocks = ace.getContraption().getBlocks().values();
@@ -149,9 +153,12 @@ public final class RemoteContraptionRenderer {
 					if (DEBUG) VoxyEntityLOD.LOGGER.info("CCDBG id={} ecCulled — skip this frame", id);
 					continue;
 				}
-				if (frustum != null && !frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 				double l1sq = lod1 * lod1;
+				// ponytail: frustum só no mesh (LOD0, caro). O wool (LOD1) é um cubo barato e deve
+				// renderizar até maxSq (100% do Voxy) — o far plane do frustum vanilla cortava o
+				// wool das cópias remotes; desenhar fora do frustum custa 1 draw, correto > barato.
 				if (d2 <= l1sq) {
+					if (frustum != null && !frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 					renderOne(entity, contraption, camera, buffers, level, cameraPos, tickDelta);
 				} else {
 					drawContraptionBlock(entity, camera, buffers, cameraPos, state.r(), state.g(), state.b());
@@ -170,10 +177,12 @@ public final class RemoteContraptionRenderer {
 					continue;
 				double d2 = e.distanceToSqr(player);
 				if (ecCulled(level.getEntity(e.getId()))) continue;
-				// vanilla ainda desenha (dentro do frustum): pula (não sobrepor); fora do
-				// frustum o vanilla culla E a passada live assume — sem estado, per-frame,
-				// então voltar a olhar restaura o desenho imediatamente.
-				if (frustum != null && frustum.isVisible(e.getBoundingBoxForCulling()))
+				// ponytail: gate por distância em vez de frustum. O vanilla/Create dropa o desenho
+				// da real ~1 chunk ANTES do render distance (gap conhecido) — ceder até RD−1
+				// chunks e assumir daí em diante cobre a faixa sem sobrepor o vanilla perto.
+				// (RD=10 → 1xRD=160² pulava a faixa do gap 160–176 e o wool sumia nela.)
+				double vanillaGuarantee = (mc.options.getEffectiveRenderDistance() - 1) * 16.0;
+				if (d2 <= vanillaGuarantee * vanillaGuarantee)
 					continue;
 				if (d2 > maxSq) continue;
 				double l1sq = lod1 * lod1;
@@ -244,7 +253,14 @@ public final class RemoteContraptionRenderer {
 		var state = ccDye(r, g, b);
 		var bb = entity.getBoundingBoxForCulling();
 		float sx=(float)(bb.maxX-bb.minX), sy=(float)(bb.maxY-bb.minY), sz=(float)(bb.maxZ-bb.minZ);
-		if (sx<0.01f||sy<0.01f||sz<0.01f) return;
+		// ponytail: bb degenerado (cópia sem contraption.bounds) → wool retorna silencioso. Se
+		// o re-force do putContraption falhar (bounds não recalculado), fallback 1×1×1 no anchor.
+		if (sx<0.01f||sy<0.01f||sz<0.01f) {
+			if (DEBUG) VoxyEntityLOD.LOGGER.warn("CCDBG id={} DEGENERATE bbox — wool fallback 1x1x1", entity.getId());
+			var p = entity.position();
+			bb = new AABB(p.x, p.y, p.z, p.x + 1, p.y + 1, p.z + 1);
+			sx = sy = sz = 1f;
+		}
 		camera.pushPose();
 		camera.translate(bb.minX-cameraPos.x, bb.minY-cameraPos.y, bb.minZ-cameraPos.z);
 		camera.scale(sx, sy, sz);
