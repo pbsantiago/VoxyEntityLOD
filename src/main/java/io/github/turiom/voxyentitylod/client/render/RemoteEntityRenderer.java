@@ -177,13 +177,14 @@ public class RemoteEntityRenderer {
 			// Frustum cull
 			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 
-			// Presence gate: with the REAL entity on the client, vanilla handles everything —
-			// it draws whenever the real is on-screen (frustum) and culls it off-screen; a
-			// copy is neither needed nor drawn there (prevents the flicker caused by drawing
-			// a lagging copy while cancelling the real in the 48..RD range). The copy only
-			// renders when the real is ABSENT (beyond vanilla tracking).
+			// Presence gate: vanilla stays in charge up to 2 chunks (32). Past that the
+			// copy renders — and MixinEntityRenderDispatcher hides the vanilla there.
 			var real=level.getEntity(entity.getId());
-			if (real != null) continue;
+			if (real!=null) {
+				applyRotation(entity, real.getYRot(), real.getXRot());
+				if (real.distanceToSqr(player) < 32*32
+					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
+			}
 
 			// Expensive gates only for copies that will actually draw — the no-UNLOAD change
 			// (1.0.18) keeps every copy alive forever, so cheap distance/frustum/reality checks

@@ -23,11 +23,11 @@ public class MixinEntityRenderDispatcher {
 			PoseStack matrices, MultiBufferSource bufferSource, int light, CallbackInfo ci) {
 		var mc = Minecraft.getInstance();
 		if (mc.level == null || mc.player == null) return;
-		// Policy since 1.0.20: the remote copy only renders when the real entity is ABSENT
-		// from the client (beyond vanilla tracking) — RemoteEntityRenderer skips every copy
-		// whose real is present. So the vanilla render of the present real is always wanted
-		// and never needs cancelling (cancelling it caused flicker: the copy draws only when
-		// visible, but the real kept being hidden even when the copy wasn't drawn).
-		// Kept as an inject no-op so reverting the policy is a one-liner if needed.
+		// Only hide when the mod copy exists (rule 3) and this is the real entity.
+		if (RemoteEntityRenderer.get(entity.getId()) == null) return;
+		if (mc.level.getEntity(entity.getId()) != entity) return;
+		// Rule 1: vanilla keeps rendering up to 2 chunks (32) — copy od there.
+		if (entity.distanceToSqr(mc.player) <= 32.0 * 32.0) return;
+		ci.cancel();
 	}
 }
