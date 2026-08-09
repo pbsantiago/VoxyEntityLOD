@@ -171,11 +171,8 @@ public class RemoteEntityRenderer {
 			if (entity.isRemoved()) continue;
 			boolean dbg = DEBUG && (++debugFrame & 19) == 0;
 
-			// EntityCulling: skip if the real entity is hidden behind solid geometry
-			if (ecCulled(level.getEntity(entity.getId()))) continue;
-
-			// Skip underground entities (caves) — save GPU
-			if (isUnderground(entity, mc)) continue;
+			double dist=entity.distanceTo(player);
+			if (dist>maxBlocks) continue;
 
 			// Frustum cull
 			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
@@ -189,9 +186,17 @@ public class RemoteEntityRenderer {
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
 
-			double dist=entity.distanceTo(player);
-			if (dist>maxBlocks) continue;
-			if (superseded(entity)) { ENTITIES.remove(entry.getKey()); continue; }
+			// Expensive gates only for copies that will actually draw — the no-UNLOAD change
+			// (1.0.18) keeps every copy alive forever, so cheap distance/frustum/reality checks
+			// must run first or a traveled world pays full per-copy work for nothing.
+			// (++frameCounter & 7): superseded scans a 6×6 box around every copy; 1/8 of frames ok.
+			if ((++frameCounter & 7) == 0 && superseded(entity)) { ENTITIES.remove(entry.getKey()); continue; }
+
+			// Skip underground entities (caves) — save GPU
+			if (isUnderground(entity, mc)) continue;
+
+			// EntityCulling: skip if the real entity is hidden behind solid geometry
+			if (ecCulled(level.getEntity(entity.getId()))) continue;
 
 			if (dbg && (entity.getId() % 17) == 0) {
 				VoxyEntityLOD.LOGGER.info("LODRW id={} dist={} real={} yCopy={} yReal={} body={} head={}",
@@ -216,4 +221,5 @@ public class RemoteEntityRenderer {
 
 	private static final boolean DEBUG = Boolean.getBoolean("voxyentitylod.debug");
 	private static long debugFrame;
+	private static int frameCounter;
 }
