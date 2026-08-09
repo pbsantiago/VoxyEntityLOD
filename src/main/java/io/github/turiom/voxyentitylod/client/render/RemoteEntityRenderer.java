@@ -174,23 +174,17 @@ public class RemoteEntityRenderer {
 			double dist=entity.distanceTo(player);
 			if (dist>maxBlocks) continue;
 
-			// Presence gate — policy: vanilla stays in charge up to 3 chunks (48). Past that the
-			// mod takes over: the copy renders and MixinEntityRenderDispatcher hides the real.
-			// The copy is synced to the real's LIVE position every frame while it is present —
-			// the server stops sending ticks once the real is back in vanilla tracking, so
-			// without this the copy freezes at its old spot and flickers (draw when visible,
-			// real cancelled, visible copy elsewhere). Sync first so every later gate
-			// (frustum/LOD/underground) sees the physical position.
+			// Frustum cull
+			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
+
+			// Presence gate: vanilla stays in charge up to 2 chunks (32). Past that the
+			// copy renders — and MixinEntityRenderDispatcher hides the vanilla there.
 			var real=level.getEntity(entity.getId());
 			if (real!=null) {
-				entity.setPos(real.position());
 				applyRotation(entity, real.getYRot(), real.getXRot());
-				if (real.distanceToSqr(player) < 48*48
+				if (real.distanceToSqr(player) < 32*32
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
-
-			// Frustum cull (copy position already synced when the real is present)
-			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 
 			// Expensive gates only for copies that will actually draw — the no-UNLOAD change
 			// (1.0.18) keeps every copy alive forever, so cheap distance/frustum/reality checks
