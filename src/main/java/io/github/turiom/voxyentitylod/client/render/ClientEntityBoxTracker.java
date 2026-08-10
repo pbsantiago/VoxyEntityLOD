@@ -8,6 +8,7 @@ import io.github.turiom.voxyentitylod.networking.packet.s2c.world.entity.LODEnti
 import io.github.turiom.voxyentitylod.networking.packet.s2c.world.entity.LODEntityRenderingS2CEntityUnloadPacket;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -16,6 +17,14 @@ import net.minecraft.world.entity.Entity;
 @Environment(EnvType.CLIENT)
 public class ClientEntityBoxTracker {
 	public static void initialize() {
+		// Limpa as cópias no disconnect: o contador de id é static (zera no restart do
+		// servidor / troca de servidor), e ids podem colidir entre sessões — cópia órfã
+		// da sessão anterior renderizaría no lugar da entidade nova.
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+			RemoteEntityRenderer.clear();
+			RemoteContraptionRenderer.clear();
+		});
+		
 		ClientPlayNetworking.registerGlobalReceiver(
 				LODEntityRenderingS2CEntityLoadPacket.getId(),
 				(client, handler, buf, sender) -> {

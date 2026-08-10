@@ -26,9 +26,9 @@ public class MixinEntityRenderDispatcher {
 		// Only hide when the mod copy exists (rule 3) and this is the real entity.
 		if (RemoteEntityRenderer.get(entity.getId()) == null) return;
 		if (mc.level.getEntity(entity.getId()) != entity) return;
-		// Policy: vanilla renders chunks 1-2; from the 3rd chunk on the mod copy takes
+		// Policy: vanilla renders up to 29 blocks; from 30 on the mod copy takes
 		// over and the real must be hidden to avoid double rendering.
-		if (entity.distanceToSqr(mc.player) <= 48.0 * 48.0) return;
+		if (entity.distanceToSqr(mc.player) < RemoteEntityRenderer.TAKE_OVER_SQ) return;
 		ci.cancel();
 	}
 }
