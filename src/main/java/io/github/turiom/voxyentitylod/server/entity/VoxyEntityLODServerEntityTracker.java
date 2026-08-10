@@ -13,10 +13,12 @@ import net.fabricmc.fabric.api.networking.v1.EntityTrackingEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
@@ -48,6 +50,10 @@ public class VoxyEntityLODServerEntityTracker {
 	// Entities vanilla is currently tracking (within vanilla render distance).
 	// The mod must NEVER touch these — vanilla already renders them.
 	private final Map<UUID, Set<Integer>> vanillaTracked = new HashMap<>();
+	// Last position the server saw each tracked entity — lets the sweep tell apart
+	// "chunk unloaded (entity frozen, copy must stay)" from "entity died/despawned in
+	// a loaded chunk (copy must die)".
+	private final Map<Integer, BlockPos> lastSeenPos = new HashMap<>();
 	private int tickCounter;
 	// Guarded once so a dedicated server without Create never trips NoClassDefFoundError.
 	private final boolean createLoaded = FabricLoader.getInstance().isModLoaded("create");
@@ -72,6 +78,9 @@ public class VoxyEntityLODServerEntityTracker {
 			var vset = vanillaTracked.get(player.getUUID());
 			if (vset != null) vset.remove(entity.getId());
 			if (entity.level() != player.level()) return;
+			// Death/despawn can race the handover: never (re)start tracking a corpse,
+			// or the client copy resurrects as a frozen ghost.
+			if (entity.isRemoved()) return;
 			if (!inRange(entity, player)) return;
 			// prefetch → promote: copy already built client-side, just refresh position
 			// (a full NBT resend would rebuild the contraption and reintroduce the delay).
@@ -91,23 +100,29 @@ public class VoxyEntityLODServerEntityTracker {
 			startTracking(player, entity);
 		});
 
-		// Entity unloaded server-side (chunk unload / despawn): the real is gone for good —
-		// a re-load later spawns a NEW id. Drop the stale copy now, or the old id lingers
-		// not the correct invalidation point: ENTITY_UNLOAD also fires on CHUNK UNLOAD — when the
-		// contraption/entity crosses the sim-distance chunk border, its chunk unloads and the real
-		// stalls server-side. Sending UNLOAD there kills the copy exactly at the chunk border → the
-		// reported "some quando troca de chunk" (old code didn't send UNLOAD; that's why it worked).
-		// ponytail: keep copies alive on chunk unload; despawn ghosts eventually get cleaned by the
-		// id-reuse check on the next Load (ClientEntityBoxTracker). Trade-off: a truly despawned
-		// entity keeps its static wool copy until the player returns — cheap, invisible-enough.
+		// ENTITY_UNLOAD fires from the vanilla tracking handler on BOTH death and chunk
+		// unload — the removal reason tells them apart. reason == null (entity merely left
+		// everyone's vanilla tracking range, still alive) and UNLOADED_TO_CHUNK are the
+		// "border" cases the copy exists for: those MUST NOT send UNLOAD (that was the old
+		// "some quando troca de chunk" bug). KILLED / DISCARDED / dimension change → real
+		// removal → kill the copy. Only fires for entities the vanilla tracker knew (a few
+		// chunks); deaths beyond that never event — the sweep (prune) is the backstop.
 		ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
 			int id = entity.getId();
+			var reason = entity.getRemovalReason();
+			if (reason != null && reason != Entity.RemovalReason.UNLOADED_TO_CHUNK)
+				for (var player : world.players())
+					if (isTracked(player, entity)) sendUnload(player, id);
+
 			for (var uuid : playerTracked.keySet())
 				if (playerTracked.get(uuid) != null) playerTracked.get(uuid).remove(id);
 			for (var uuid : contraptionTracked.keySet())
 				if (contraptionTracked.get(uuid) != null) contraptionTracked.get(uuid).remove(id);
 			for (var uuid : prefetchSet.keySet())
 				if (prefetchSet.get(uuid) != null) prefetchSet.get(uuid).remove(id);
+			// id is now in no set → its last position is dead weight (the promoted copy
+			// re-registers on the next tick).
+			lastSeenPos.remove(id);
 		});
 
 		// Player joins → send all entities
@@ -171,6 +186,7 @@ public class VoxyEntityLODServerEntityTracker {
 							var entity = world.getEntity(entityId);
 							if (entity == null) continue;
 							var pos = entity.position();
+							lastSeenPos.put(entityId, BlockPos.containing(pos.x, pos.y, pos.z));
 							ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityTickPacket.getId(),
 									new LODEntityRenderingS2CEntityTickPacket(
 											entityId, new Vector3f((float) pos.x, (float) pos.y, (float) pos.z),
@@ -184,6 +200,7 @@ public class VoxyEntityLODServerEntityTracker {
 							var entity = world.getEntity(entityId);
 							if (entity == null) continue;
 							var pos = entity.position();
+							lastSeenPos.put(entityId, BlockPos.containing(pos.x, pos.y, pos.z));
 							ServerPlayNetworking.send(player, LODContraptionRenderingS2CContraptionTickPacket.getId(),
 									new LODContraptionRenderingS2CContraptionTickPacket(
 											entityId,
@@ -210,21 +227,28 @@ public class VoxyEntityLODServerEntityTracker {
 	private void pruneTracked(@NotNull ServerPlayer player, @NotNull ServerLevel world) {
 		prune(world, player, playerTracked.get(player.getUUID()));
 		prune(world, player, contraptionTracked.get(player.getUUID()));
+		prune(world, player, prefetchSet.get(player.getUUID()));
 	}
 
-	// Death path: ENTITY_UNLOAD only fires for chunks the vanilla tracker tracks (view
-	// distance). Mobs the mod renders beyond that (sim-distance only) die via stopTicking
-	// with NO Fabric event — their copies would freeze and render forever. Periodic sweep:
-	// server entity gone => kill the client copy now.
+	// Death beyond vanilla tracking: ENTITY_UNLOAD never fires there (the vanilla tracker
+	// never knew the entity), so the sweep is the only witness. The catch: "server entity
+	// gone" also happens on chunk unload (entity frozen in an unloaded chunk, copy must
+	// stay). An entity can only die/despawn while its chunk is loaded, so a still-loaded
+	// chunk at the last known position means real death → UNLOAD; unloaded chunk → border
+	// case → keep the copy.
 	private void prune(@NotNull ServerLevel world, @NotNull ServerPlayer player, @Nullable Set<Integer> set) {
 		if (set == null) return;
-		// ponytail: drop from the tracking set WITHOUT an UNLOAD packet — the same chunk-unload
-		// problem as ENTITY_UNLOAD would kill the copy at the sim-distance border. The copy on the
-		// client persists as a static wool (cheap, imperceptible) and gets replaced on the next Load.
 		for (var it = set.iterator(); it.hasNext();) {
 			int id = it.next();
 			if (world.getEntity(id) != null) continue;
+			// Chunk descarregado = entidade congelada no disco, cópia fica. NÃO dropar o id:
+			// quando o chunk recarregar, o mob ou despawna ou volta com ID NOVO —
+			// world.getEntity(idVelho) fica null pra sempre, e só re-checar o id no set
+			// manda o UNLOAD que o ghost precisa. (Chunk off = re-check no próximo sweep.)
+			var last = lastSeenPos.get(id);
+			if (last == null || !world.isLoaded(last)) continue;
 			it.remove();
+			sendUnload(player, id);
 		}
 	}
 
@@ -274,7 +298,7 @@ public class VoxyEntityLODServerEntityTracker {
 	}
 
 	private void startTracking(@NotNull ServerPlayer player, @NotNull Entity entity) {
-		if (entity instanceof ItemEntity) return; // dropped items: vanilla range is enough, LOD copy looks wrong
+		if (entity instanceof ItemEntity || entity instanceof ExperienceOrb) return; // dropped items & XP orbs: vanilla range is enough, LOD copy looks wrong
 		// rebuild them out of render distance. Only handles loaded Create contraptions.
 		if (createLoaded && entity instanceof AbstractContraptionEntity) {
 			startTrackingContraption(player, (AbstractContraptionEntity) entity);
@@ -298,7 +322,7 @@ public class VoxyEntityLODServerEntityTracker {
 	}
 
 	private void startPrefetchEntity(@NotNull ServerPlayer player, @NotNull Entity entity) {
-		if (entity instanceof ItemEntity) return; // keep dropped items out of the LOD pipeline
+		if (entity instanceof ItemEntity || entity instanceof ExperienceOrb) return; // keep dropped items & XP orbs out of the LOD pipeline
 		sendEntityLoad(player, entity);
 		prefetchSet.computeIfAbsent(player.getUUID(), k -> new HashSet<>()).add(entity.getId());
 	}
@@ -308,6 +332,9 @@ public class VoxyEntityLODServerEntityTracker {
 		if (texId == null) texId = FALLBACK_ID;
 
 		var pos = entity.position();
+		// grava a posição no Load: o sweep precisa do lastSeenPos pra decidir, e a
+		// entidade pode morrer antes do primeiro refresh de 100 ticks (last == null = ghost).
+		lastSeenPos.put(entity.getId(), BlockPos.containing(pos.x, pos.y, pos.z));
 		var bb = entity.getBoundingBox();
 
 		// renders the correct appearance (e.g. black sheep, brown llama).
@@ -346,6 +373,7 @@ public class VoxyEntityLODServerEntityTracker {
 		if (texId == null) texId = FALLBACK_ID;
 
 		var pos = entity.position();
+		lastSeenPos.put(entity.getId(), BlockPos.containing(pos.x, pos.y, pos.z));
 
 		// strip only per-motion/render-irrelevant fields; yaw/pitch travel in the packet.
 		@Nullable CompoundTag nbt = null;
@@ -366,6 +394,11 @@ public class VoxyEntityLODServerEntityTracker {
 						entity.getYRot(), entity.getXRot(),
 						nbt
 				).writeBuf());
+	}
+
+	private void sendUnload(@NotNull ServerPlayer player, int entityId) {
+		ServerPlayNetworking.send(player, LODEntityRenderingS2CEntityUnloadPacket.getId(),
+				new LODEntityRenderingS2CEntityUnloadPacket(entityId).writeBuf());
 	}
 
 	private void sendContraptionTick(@NotNull ServerPlayer player, @NotNull Entity entity) {

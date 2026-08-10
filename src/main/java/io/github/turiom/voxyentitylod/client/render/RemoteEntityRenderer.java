@@ -17,6 +17,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Environment(EnvType.CLIENT)
 public class RemoteEntityRenderer {
+	// Fronteira vanilla ↔ mod: vanilla renderiza até 29 blocos (dist² < 900), o mod
+	// assume a partir de 30. Um knob só — o gate da cópia e o mixin de cancelamento
+	// leem a mesma constante pra nunca divergirem.
+	public static final double TAKE_OVER_SQ = 30.0 * 30.0;
 	private static final Map<Integer, Entity> ENTITIES = new ConcurrentHashMap<>();
 	public static MultiBufferSource.BufferSource currentBufferSource;
 	public static Vec3 currentCameraPos;
@@ -25,6 +29,7 @@ public class RemoteEntityRenderer {
 	public static void put(int id, Entity entity) { ENTITIES.put(id, entity); }
 	public static Entity get(int id) { return ENTITIES.get(id); }
 	public static void remove(int id) { ENTITIES.remove(id); }
+	public static void clear() { ENTITIES.clear(); }
 
 	public static void updatePosition(int id, Vector3f pos, float yRot, float xRot) {
 		var entity = ENTITIES.get(id);
@@ -177,13 +182,12 @@ public class RemoteEntityRenderer {
 			// Frustum cull
 			if (frustum!=null&&!frustum.isVisible(entity.getBoundingBoxForCulling())) continue;
 
-			// Presence gate: vanilla renders chunks 1-2. Policy: vanilla stays in charge up
-			// to 3 chunks (48); from the 3rd chunk on the mod takes over — the
-			// copy renders and MixinEntityRenderDispatcher hides the vanilla there.
+			// Presence gate: vanilla renders up to 29 blocks; from 30 on the mod copies
+			// take over — the copy renders and MixinEntityRenderDispatcher hides the vanilla.
 			var real=level.getEntity(entity.getId());
 			if (real!=null) {
 				applyRotation(entity, real.getYRot(), real.getXRot());
-				if (real.distanceToSqr(player) < 48*48
+				if (real.distanceToSqr(player) < TAKE_OVER_SQ
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
 

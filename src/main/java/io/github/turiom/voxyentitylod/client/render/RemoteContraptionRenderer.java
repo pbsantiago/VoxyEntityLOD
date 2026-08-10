@@ -88,6 +88,11 @@ public final class RemoteContraptionRenderer {
 		prevVisMap.remove(id);
 	}
 
+	public static void clear() {
+		CONTRAPTIONS.clear();
+		prevVisMap.clear();
+	}
+
 	// null when unknown: lets callers inspect the copy (e.g. type check on id reuse).
 	public static @Nullable AbstractContraptionEntity get(int id) {
 		var s = CONTRAPTIONS.get(id);
