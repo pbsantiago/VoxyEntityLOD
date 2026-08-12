@@ -110,7 +110,11 @@ public class VoxyEntityLODServerEntityTracker {
 		ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
 			int id = entity.getId();
 			var reason = entity.getRemovalReason();
-			if (reason != null && reason != Entity.RemovalReason.UNLOADED_TO_CHUNK)
+			// UNLOADED_TO_CHUNK: entidade congelada no disco, a cópia deve ficar.
+			// O prune re-checa quando o chunk recarregar — se o mob não voltar (ou
+			// voltar com id novo), o prune manda UNLOAD. Não mexer nos sets.
+			if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK) return;
+			if (reason != null)
 				for (var player : world.players())
 					if (isTracked(player, entity)) sendUnload(player, id);
 
@@ -120,8 +124,6 @@ public class VoxyEntityLODServerEntityTracker {
 				if (contraptionTracked.get(uuid) != null) contraptionTracked.get(uuid).remove(id);
 			for (var uuid : prefetchSet.keySet())
 				if (prefetchSet.get(uuid) != null) prefetchSet.get(uuid).remove(id);
-			// id is now in no set → its last position is dead weight (the promoted copy
-			// re-registers on the next tick).
 			lastSeenPos.remove(id);
 		});
 
@@ -133,9 +135,9 @@ public class VoxyEntityLODServerEntityTracker {
 		ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
 			clearPlayer(handler.getPlayer()));
 
-		// Player changes dimension → re-send
+		// Player changes dimension → limpa as cópias do cliente e re-envia
 		ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((player, origin, destination) -> {
-			clearPlayer(player);
+			unloadAllAndClear(player);
 			sendAllInRange(player);
 		});
 
@@ -295,6 +297,19 @@ public class VoxyEntityLODServerEntityTracker {
 		contraptionTracked.remove(player.getUUID());
 		prefetchSet.remove(player.getUUID());
 		vanillaTracked.remove(player.getUUID());
+	}
+
+	private void unloadAllAndClear(ServerPlayer player) {
+		var uuid = player.getUUID();
+		unloadSet(player, playerTracked.get(uuid));
+		unloadSet(player, contraptionTracked.get(uuid));
+		unloadSet(player, prefetchSet.get(uuid));
+		clearPlayer(player);
+	}
+
+	private void unloadSet(ServerPlayer player, @Nullable Set<Integer> set) {
+		if (set == null) return;
+		for (int id : set) sendUnload(player, id);
 	}
 
 	private void startTracking(@NotNull ServerPlayer player, @NotNull Entity entity) {
