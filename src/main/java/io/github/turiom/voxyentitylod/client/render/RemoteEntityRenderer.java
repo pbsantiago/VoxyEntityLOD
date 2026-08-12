@@ -191,6 +191,13 @@ public class RemoteEntityRenderer {
 					&& frustum!=null && frustum.isVisible(real.getBoundingBoxForCulling())) continue;
 			}
 
+			// Proximity fallback: real não existe mas cópia está dentro do range vanilla
+			// → entidade morreu/despawnou, a cópia é fantasma.
+			if (real == null && dist < 30.0) {
+				ENTITIES.remove(entry.getKey());
+				continue;
+			}
+
 			// Expensive gates only for copies that will actually draw — the no-UNLOAD change
 			// (1.0.18) keeps every copy alive forever, so cheap distance/frustum/reality checks
 			// must run first or a traveled world pays full per-copy work for nothing.

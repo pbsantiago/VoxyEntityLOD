@@ -39,13 +39,9 @@ Distance thresholds scale with Voxy's `sectionRenderDistance` slider (default 51
 
 ## Shader compatibility
 
-Not all shader packs are compatible. The mod renders at the `renderLevel` TAIL using standard Minecraft render types (`RenderType.translucent`, `RenderType.lines`). Shaders that override or replace these render types may cause:
+Since **1.1.0**, LOD geometry is drawn **inside the entity phase of `renderLevel`** (at `ClientLevel.entitiesForRendering()`, between the solid/cutout chunk layers and the translucent pass) instead of at the `renderLevel` TAIL. At the TAIL the draw landed outside Iris's gbuffer passes — after the pipeline finalizes — so shader packs that replaced the vanilla render types showed nothing, invisible wool, or wrong colours. Inside the entity phase, the vanilla render types used by the mod (entity models, wool blocks, Create meshes) are mapped by the shader pack to the correct gbuffers with proper depth, fog and lighting.
 
-- Entities not appearing at LOD ranges
-- Wool blocks rendering invisible or with wrong colours
-- Visual glitches
-
-**Testing is welcome** — if you find a shader pack that works (or doesn't), please report it so we can improve compatibility.
+Shader packs that remap render types for their own effects may still look off — **testing is welcome**; report packs that work (or don't) so compatibility can be improved.
 
 ## Credits
 

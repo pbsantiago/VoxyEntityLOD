@@ -1,8 +1,6 @@
 package io.github.turiom.voxyentitylod.mixin.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import io.github.turiom.voxyentitylod.client.render.RemoteContraptionRenderer;
 import io.github.turiom.voxyentitylod.client.render.RemoteEntityRenderer;
 import net.fabricmc.api.EnvType;
@@ -32,7 +30,6 @@ public abstract class MixinLevelRenderer {
 	@Shadow @Final private RenderBuffers renderBuffers;
 	@Shadow @Nullable private ClientLevel level;
 
-	@Unique private Matrix4f voxyentitylod$vanillaProjection;
 	@Unique private Frustum voxyentitylod$currentFrustum;
 	@Inject(method = "renderLevel", at = @At("HEAD"))
 	private void voxyentitylod$captureState(
@@ -40,7 +37,6 @@ public abstract class MixinLevelRenderer {
 			Camera camera, GameRenderer gameRenderer, LightTexture lightTexture,
 			Matrix4f projectionMatrix, CallbackInfo ci
 	) {
-		voxyentitylod$vanillaProjection = new Matrix4f(projectionMatrix);
 		RemoteEntityRenderer.currentBufferSource = renderBuffers.bufferSource();
 		RemoteEntityRenderer.currentCameraPos = camera.getPosition();
 		RemoteEntityRenderer.currentTickDelta = tickDelta;
@@ -56,16 +52,25 @@ public abstract class MixinLevelRenderer {
 		voxyentitylod$currentFrustum = frustum;
 	}
 
-	@Inject(method = "renderLevel", at = @At("TAIL"))
+	// 1.1 (shaders): render DENTRO da fase de entidades do renderLevel, não no TAIL.
+	// Em 1.20.1 a fase é inline no renderLevel (INVOKE de ClientLevel.entitiesForRendering), entre
+	// as layers sólidas/cutout e o translucent, com a projection do nível ainda ativa (o LevelRenderer
+	// nunca troca a projection matrix dentro de renderLevel — zero setProjectionMatrix na classe).
+	// No TAIL o draw caía fora dos gbuffers: o Iris finaliza em RETURN-shift-BEFORE = MESMO opcode do
+	// TAIL, ordem indeterminada entre mixins → entidades/wool desenhados depois do finalize, sem
+	// programa do pack, depth errado ("depende do pack"). Aqui os render types vanilla (entity_* dos
+	// modelos, solid/cutout do wool e os chunkBufferLayers do Create) são mapeados pelos shaders do
+	// pack para os gbuffers certos. endBatch() na hora evita o wool ficar pendurado até o flush final
+	// (que sob Iris acontece pós-finalize).
+	@Inject(method = "renderLevel",
+			at = @At(value = "INVOKE",
+					target = "Lnet/minecraft/client/multiplayer/ClientLevel;entitiesForRendering()Ljava/lang/Iterable;"))
 	private void voxyentitylod$renderRemoteEntities(
 			PoseStack matrices, float tickDelta, long limitTime, boolean renderBlockOutline,
 			Camera camera, GameRenderer gameRenderer, LightTexture lightTexture,
 			Matrix4f projectionMatrix, CallbackInfo ci
 	) {
 		if (level == null || minecraft.player == null) return;
-
-		RenderSystem.setProjectionMatrix(voxyentitylod$vanillaProjection,
-				VertexSorting.DISTANCE_TO_ORIGIN);
 
 		var bufferSource = renderBuffers.bufferSource();
 		RemoteEntityRenderer.render(matrices, bufferSource, camera.getPosition(), tickDelta, voxyentitylod$currentFrustum);
